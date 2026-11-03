@@ -1,0 +1,26 @@
+# Optional HTTPS reverse proxy overlay.
+#
+# 1. Put TLS files in ./production/certs/fullchain.pem and privkey.pem
+#    (e.g. from Let's Encrypt / mkcert / your PKI)
+# 2. Set in .env:
+#      OPENCTI_HOST=opencti.example.com
+#      OPENCTI_PORT=443
+#      OPENCTI_EXTERNAL_SCHEME=https
+# 3. Start:
+#      docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+#
+# For local lab without real DNS, use mkcert and hosts file entry.
+
+services:
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./production/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./production/certs:/etc/nginx/certs:ro
+    depends_on:
+      opencti:
+        condition: service_healthy
+    restart: always

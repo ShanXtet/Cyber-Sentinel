@@ -136,7 +136,14 @@ services:
   ###########################
   
   opencti:
-    image: opencti/platform:latest
+    # Custom image: official platform + Filigran Experience menu removed
+    # See PLATFORM-CUSTOM.md — rebuild after upgrading opencti/platform
+    build:
+      context: ./platform-custom
+      args:
+        BASE_IMAGE: opencti/platform
+        BASE_TAG: latest
+    image: cyber-sentinel/platform:custom
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -164,6 +171,8 @@ services:
       - SMTP__PORT=25
       - PROVIDERS__LOCAL__STRATEGY=LocalStrategy
       - APP__HEALTH_ACCESS_KEY=${OPENCTI_HEALTHCHECK_ACCESS_KEY}
+      # Empty = hide XTM Hub integration hooks in UI (docs)
+      - XTM__XTMHUB_URL=
       # XTM One
       - XTM__XTM_ONE_URL=http://xtm-one:4000
       - XTM__XTM_ONE_TOKEN=${PLATFORM_REGISTRATION_TOKEN}
@@ -327,8 +336,7 @@ services:
       - CONNECTOR_ID=${CONNECTOR_OPENCTI_ID}
       - "CONNECTOR_NAME=OpenCTI Datasets"
       - CONNECTOR_SCOPE=marking-definition,identity,location
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=100
+      - CONNECTOR_LOG_LEVEL=info
     restart: always
     depends_on:
       opencti:
@@ -339,12 +347,183 @@ services:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
       - CONNECTOR_ID=${CONNECTOR_MITRE_ID}
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT=true
-      - CONNECTOR_AUTO_CREATE_SERVICE_ACCOUNT_CONFIDENCE_LEVEL=75      
+      - "CONNECTOR_NAME=MITRE ATT&CK"
+      - CONNECTOR_SCOPE=tool,report,malware,identity,campaign,intrusion-set,attack-pattern,course-of-action,x-mitre-data-source,x-mitre-data-component,x-mitre-matrix,x-mitre-tactic,x-mitre-collection
+      - CONNECTOR_LOG_LEVEL=info
+      - MITRE_INTERVAL=7
     restart: always
     depends_on:
       opencti:
         condition: service_healthy
+
+  ###########################
+  # OPTIONAL EXTERNAL FEEDS #
+  # Enable after filling .env #
+  ###########################
+
+  # AlienVault OTX — creates Intrusion Set/Malware → targets → Country
+  # Fills home dashboard "Targeted countries (Last 3 months)"
+  # Free API key: https://otx.alienvault.com (personal email OK)
+  # Enable: set ALIENVAULT_API_KEY in .env then:
+  #   docker compose --profile otx up -d
+  connector-alienvault:
+    image: opencti/connector-alienvault:latest
+    profiles: ["otx"]
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_ALIENVAULT_ID}
+      - CONNECTOR_NAME=AlienVault OTX
+      - CONNECTOR_SCOPE=alienvault
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT30M
+      - ALIENVAULT_BASE_URL=https://otx.alienvault.com
+      - ALIENVAULT_API_KEY=${ALIENVAULT_API_KEY}
+      - ALIENVAULT_TLP=White
+      - ALIENVAULT_CREATE_OBSERVABLES=true
+      - ALIENVAULT_CREATE_INDICATORS=true
+      - ALIENVAULT_PULSE_START_TIMESTAMP=${ALIENVAULT_PULSE_START_TIMESTAMP:-2025-01-01T00:00:00}
+      - ALIENVAULT_REPORT_TYPE=threat-report
+      - ALIENVAULT_ENABLE_RELATIONSHIPS=true
+      - ALIENVAULT_ENABLE_ATTACK_PATTERNS_INDICATES=true
+      - ALIENVAULT_DEFAULT_X_OPENCTI_SCORE=50
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # CISA Known Exploited Vulnerabilities (free, no API key)
+  # Creates Vulnerability + Software "has" relationships → fills home dashboard
+  # "Most active vulnerabilities (Last 3 months)"
+  connector-cisa-kev:
+    image: opencti/connector-cisa-known-exploited-vulnerabilities:latest
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_CISA_KEV_ID}
+      - CONNECTOR_NAME=CISA KEV
+      - CONNECTOR_SCOPE=cisa
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=P1D
+      - CISA_CATALOG_URL=https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json
+      - CISA_CREATE_INFRASTRUCTURES=false
+      - CISA_KEV_FLAG_ONLY=false
+      - CISA_TLP=TLP:CLEAR
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # NVD CVE feed — requires free API key from https://nvd.nist.gov/developers/request-an-api-key
+  connector-cve:
+    image: opencti/connector-cve:latest
+    profiles: ["feeds"]
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_CVE_ID}
+      - CONNECTOR_NAME=Common Vulnerabilities and Exposures
+      - CONNECTOR_SCOPE=cve
+      - CONNECTOR_LOG_LEVEL=info
+      - CVE_API_KEY=${CVE_API_KEY}
+      - CVE_INTERVAL=2
+      - CVE_MAINTAIN_DATA=true
+      - CVE_PULL_HISTORY=false
+      # Smaller first-sync window so NVD queries finish before timeout
+      - CVE_MAX_DATE_RANGE=7
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # Ransomware.live API — creates Intrusion Sets (groups), victims, locations, reports
+  # Better than RSS alone for dashboards (structured STIX + relationships)
+  connector-ransomwarelive:
+    image: opencti/connector-ransomwarelive:latest
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_RANSOMWARELIVE_ID}
+      - "CONNECTOR_NAME=Ransomware.live"
+      - CONNECTOR_SCOPE=identity,domain-name,location,threat-actor,intrusion-set,campaign,report,relationship
+      - CONNECTOR_LOG_LEVEL=info
+      - CONNECTOR_DURATION_PERIOD=PT6H
+      - RANSOMWARELIVE_API_BASE_URL=https://api.ransomware.live/v2
+      - RANSOMWARELIVE_API_KEY=${RANSOMWARELIVE_API_KEY:-}
+      - RANSOMWARELIVE_CREATE_THREAT_ACTOR=false
+      - RANSOMWARELIVE_CREATE_INTRUSION_SET=true
+      - RANSOMWARELIVE_CREATE_CAMPAIGN=false
+      - RANSOMWARELIVE_CREATE_REPORT=true
+      - RANSOMWARELIVE_CREATE_LEAK_SITE_DOMAINS=false
+      - RANSOMWARELIVE_CREATE_LEAK_POST_REFS=false
+      - RANSOMWARELIVE_PULL_HISTORY=false
+      - RANSOMWARELIVE_HISTORY_START_YEAR=2024
+      - RANSOMWARELIVE_MARKING_VALUE=TLP:CLEAR
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # MISP sync — requires your MISP instance URL + API key
+  connector-misp:
+    image: opencti/connector-misp:latest
+    profiles: ["misp"]
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_MISP_ID}
+      - CONNECTOR_TYPE=EXTERNAL_IMPORT
+      - CONNECTOR_NAME=MISP
+      - CONNECTOR_SCOPE=misp
+      - CONNECTOR_LOG_LEVEL=info
+      - MISP_URL=${MISP_URL}
+      - MISP_KEY=${MISP_KEY}
+      - MISP_SSL_VERIFY=${MISP_SSL_VERIFY:-true}
+      - MISP_CREATE_REPORTS=true
+      - MISP_CREATE_INDICATORS=true
+      - MISP_CREATE_OBSERVABLES=true
+      - MISP_IMPORT_FROM_DATE=${MISP_IMPORT_FROM_DATE:-2024-01-01}
+      - CONNECTOR_DURATION_PERIOD=PT5M
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+
+  # Wazuh enrichment — looks up OpenCTI observables/indicators in Wazuh OpenSearch
+  # Start with: docker compose --profile wazuh up -d connector-wazuh
+  # Docs: https://misje.github.io/opencti-wazuh-connector/
+  connector-wazuh:
+    image: ghcr.io/misje/opencti-wazuh-connector:${WAZUH_CONNECTOR_TAG:-0.3.0}
+    profiles: ["wazuh"]
+    environment:
+      - TZ=${WAZUH_CONNECTOR_TZ:-UTC}
+      - USE_TZ=true
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_WAZUH_ID}
+      - CONNECTOR_NAME=Wazuh
+      - CONNECTOR_SCOPE=Artifact,Directory,Domain-Name,Email-Addr,Hostname,IPv4-Addr,IPv6-Addr,Mac-Addr,Network-Traffic,Process,StixFile,Url,User-Account,User-Agent,Windows-Registry-Key,Windows-Registry-Value-Type,Vulnerability,Indicator
+      - CONNECTOR_AUTO=${WAZUH_CONNECTOR_AUTO:-true}
+      - CONNECTOR_LOG_LEVEL=${WAZUH_CONNECTOR_LOG_LEVEL:-info}
+      - CONNECTOR_EXPOSE_METRICS=false
+      # Dashboard URL (links in OpenCTI UI) — e.g. https://wazuh.example.com
+      - WAZUH_APP_URL=${WAZUH_APP_URL}
+      # OpenSearch/Indexer API — usually https://host:9200 (NOT the dashboard port)
+      - WAZUH_OPENSEARCH_URL=${WAZUH_OPENSEARCH_URL}
+      - WAZUH_OPENSEARCH_USERNAME=${WAZUH_OPENSEARCH_USERNAME}
+      - WAZUH_OPENSEARCH_PASSWORD=${WAZUH_OPENSEARCH_PASSWORD}
+      - WAZUH_OPENSEARCH_VERIFY_TLS=${WAZUH_OPENSEARCH_VERIFY_TLS:-true}
+      - WAZUH_MAX_TLP=${WAZUH_MAX_TLP:-TLP:AMBER+STRICT}
+      - WAZUH_TLPS=${WAZUH_TLPS:-TLP:AMBER+STRICT}
+    volumes:
+      - wazuhconnectorcache:/var/cache/wazuh
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+    logging:
+      options:
+        max-size: 50m
 
   ###########################
   # XTM ONE                 #
@@ -418,8 +597,73 @@ services:
     depends_on:
       xtm-one:
         condition: service_healthy
-    restart: always
 
+  connector-abuseipdb-ipblacklist:
+    image: opencti/connector-abuseipdb-ipblacklist:latest
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_ABUSEIPDB_IPBLACKLIST_ID}
+      - CONNECTOR_NAME=AbuseIPDB IP Blacklist
+      - CONNECTOR_SCOPE=abuseipdb
+      - CONNECTOR_LOG_LEVEL=${CONNECTOR_ABUSEIPDB_LOG_LEVEL:-info}
+      - CONNECTOR_DURATION_PERIOD=PT12H
+      - ABUSEIPDB_API_KEY=${ABUSEIPDB_API_KEY}
+      - ABUSEIPDB_SCORE=${ABUSEIPDB_SCORE:-75}
+      - ABUSEIPDB_TLP_LEVEL=${ABUSEIPDB_TLP_LEVEL:-clear}
+      # Optional filters:
+      # - ABUSEIPDB_IPVERSION=4
+      # - ABUSEIPDB_LIMIT=10000
+      # - ABUSEIPDB_EXCEPT_COUNTRY=RU,CN
+      # - ABUSEIPDB_ONLY_COUNTRY=US
+      # - ABUSEIPDB_CREATE_INDICATOR=true
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
+  connector-virustotal:
+    image: opencti/connector-virustotal:latest
+    environment:
+      - OPENCTI_URL=http://opencti:8080
+      - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
+      - CONNECTOR_ID=${CONNECTOR_VIRUSTOTAL_ID}
+      - CONNECTOR_TYPE=INTERNAL_ENRICHMENT
+      - CONNECTOR_NAME=VirusTotal
+      - CONNECTOR_SCOPE=StixFile,Artifact,IPv4-Addr,Domain-Name,Url
+      - CONNECTOR_AUTO=true # Enable/disable auto-enrichment of observables
+      - CONNECTOR_CONFIDENCE_LEVEL=50 # From 0 (Unknown) to 100 (Fully trusted)
+      - CONNECTOR_LOG_LEVEL=info
+      - VIRUSTOTAL_TOKEN=${VIRUSTOTAL_API_KEY}
+      - VIRUSTOTAL_MAX_TLP=TLP:AMBER
+      - VIRUSTOTAL_REPLACE_WITH_LOWER_SCORE=false # Whether to keep the higher of the VT or existing score (false) or force the score to be updated with the VT score even if its lower than existing score (true).
+      # File/Artifact specific config settings
+      - VIRUSTOTAL_FILE_CREATE_NOTE_FULL_REPORT=true # Whether or not to include the full report as a Note
+      - VIRUSTOTAL_FILE_UPLOAD_UNSEEN_ARTIFACTS=false # Whether to upload artifacts (smaller than 32MB) that VirusTotal has no record of
+      - VIRUSTOTAL_FILE_INDICATOR_CREATE_POSITIVES=10 # Create an indicator for File/Artifact based observables once this positive theshold is reached. Note: specify 0 to disable indicator creation
+      - VIRUSTOTAL_FILE_INDICATOR_VALID_MINUTES=2880 # How long the indicator is valid for in minutes
+      - VIRUSTOTAL_FILE_INDICATOR_DETECT=true # Whether or not to set detection for the indicator to true
+      # IP specific config settings
+      - VIRUSTOTAL_IP_INDICATOR_CREATE_POSITIVES=10 # Create an indicator for IPv4 based observables once this positive theshold is reached. Note: specify 0 to disable indicator creation
+      - VIRUSTOTAL_IP_INDICATOR_VALID_MINUTES=2880 # How long the indicator is valid for in minutes
+      - VIRUSTOTAL_IP_INDICATOR_DETECT=true # Whether or not to set detection for the indicator to true
+      - VIRUSTOTAL_IP_ADD_RELATIONSHIPS=true # Whether or not to add ASN and location resolution relationships
+      # Domain specific config settings
+      - VIRUSTOTAL_DOMAIN_INDICATOR_CREATE_POSITIVES=10 # Create an indicator for Domain based observables once this positive theshold is reached. Note: specify 0 to disable indicator creation
+      - VIRUSTOTAL_DOMAIN_INDICATOR_VALID_MINUTES=2880 # How long the indicator is valid for in minutes
+      - VIRUSTOTAL_DOMAIN_INDICATOR_DETECT=true # Whether or not to set detection for the indicator to true
+      - VIRUSTOTAL_DOMAIN_ADD_RELATIONSHIPS=true # Whether or not to add IP resolution relationships
+      # URL specific config settings
+      - VIRUSTOTAL_URL_UPLOAD_UNSEEN=false # Whether to upload URLs that VirusTotal has no record of for analysis
+      - VIRUSTOTAL_URL_INDICATOR_CREATE_POSITIVES=10 # Create an indicator for Url based observables once this positive theshold is reached. Note: specify 0 to disable indicator creation
+      - VIRUSTOTAL_URL_INDICATOR_VALID_MINUTES=2880 # How long the indicator is valid for in minutes
+      - VIRUSTOTAL_URL_INDICATOR_DETECT=true # Whether or not to set detection for the indicator to true
+    deploy:
+      mode: replicated
+      replicas: 1
+    restart: always
+    depends_on:
+      opencti:
+        condition: service_healthy
 volumes:
   esdata:
   s3data:
@@ -427,3 +671,4 @@ volumes:
   amqpdata:
   rsakeys:
   pgsqlxtmonedata:
+  wazuhconnectorcache:

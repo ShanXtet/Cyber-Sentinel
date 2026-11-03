@@ -1,0 +1,24 @@
+{
+  "description": "Keywords for myanmar_news_telegram_watcher.py Telegram alerts. Edit this file anytime; the watcher reloads it each poll cycle.",
+  "case_insensitive": true,
+  "match_fields": ["name", "description", "creators", "labels"],
+  "keywords": [
+    "myanmar",
+    "burma",
+    "burmese",
+    "yangon",
+    "rangoon",
+    "naypyidaw",
+    "naypyitaw",
+    "မြန်မာ",
+    "Ransomware"
+  ],
+  "regex_keywords": [],
+  "notes": [
+    "Plain keywords are matched as substrings (case-insensitive by default).",
+    "match_fields may include: name, description, creators, labels.",
+    "Put advanced patterns in regex_keywords (e.g. \"\\\\bmmr\\\\b\").",
+    "Avoid very short tokens like \"mm\" — they cause false positives.",
+    "Only already-notified report ids are stored; changing keywords can alert on older matches."
+  ]
+}

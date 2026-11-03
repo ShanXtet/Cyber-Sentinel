@@ -1,2 +1,4 @@
 *.iml
 .env
+opencti-src/
+platform-custom/_probe/
