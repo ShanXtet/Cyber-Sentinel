@@ -2,3 +2,4 @@
 .env
 opencti-src/
 platform-custom/_probe/
+.github/workflows/
