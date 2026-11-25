@@ -120,7 +120,8 @@ services:
   ###########################
 
   opencti:
-    image: opencti/platform:latest
+    # From 7.260224.0 SSO is Enterprise-only. Pin 6.9.22 for Community CyberHub OpenID.
+    image: opencti/platform:${OPENCTI_VERSION:-6.9.22}
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -130,6 +131,7 @@ services:
       - APP__ADMIN__PASSWORD=${OPENCTI_ADMIN_PASSWORD}
       - APP__ADMIN__TOKEN=${OPENCTI_ADMIN_TOKEN}
       - APP__ENCRYPTION_KEY=${OPENCTI_ENCRYPTION_KEY}
+      - APP__ENTERPRISE_EDITION_LICENSE=${OPENCTI_ENTERPRISE_EDITION_LICENSE:-}
       - REDIS__HOSTNAME=redis
       - REDIS__PORT=6379
       - ELASTICSEARCH__URL=http://opensearch:9200
@@ -183,7 +185,7 @@ services:
       timeout: 5s
       retries: 20
   worker:
-    image: opencti/worker:latest
+    image: opencti/worker:${OPENCTI_VERSION:-6.9.22}
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}

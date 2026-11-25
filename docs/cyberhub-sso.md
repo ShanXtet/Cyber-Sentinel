@@ -67,6 +67,29 @@ docker compose logs opencti --tail=200 | grep -iE 'OPENID|Error login|Invalid au
 
 A configured provider redirects to Keycloak (HTTP 302/303). HTTP 503 means the OpenID provider is still missing from the running container env.
 
-## Note on OpenCTI editions
+## Note on OpenCTI editions (this is the usual cause of the screenshot error)
 
-Filigran documents that from OpenCTI `7.260224.0`, SSO strategies are an Enterprise Edition feature. If `/auth/oic` stays unavailable after the env is set, check the OpenCTI version and license. Local password login remains through `PROVIDERS__LOCAL__STRATEGY=LocalStrategy`.
+From OpenCTI `7.260224.0`, **SSO is Enterprise Edition only**. Community `latest` still shows “Sign in with CyberHub” and redirects to Keycloak, then returns to `/dashboard` with **Invalid authentication, please ask your administrator**.
+
+This stack defaults to **`OPENCTI_VERSION=6.9.22`** (last Community line with OpenID). On the VM:
+
+```bash
+# in cyber-sentinel/.env
+OPENCTI_VERSION=6.9.22
+
+# elasticsearch compose:
+docker compose pull opencti worker
+docker compose build --no-cache opencti
+docker compose up -d opencti worker
+
+# opensearch compose:
+docker compose -f docker-compose.opensearch.yml pull opencti worker
+docker compose -f docker-compose.opensearch.yml up -d opencti worker
+```
+
+If the platform was already migrated on OpenCTI 7.x, a downgrade can fail schema checks. Then either:
+
+1. Set `OPENCTI_ENTERPRISE_EDITION_LICENSE` to a Filigran/OpenCTI EE PEM and keep `OPENCTI_VERSION=latest`, or  
+2. Take a backup, reset OpenCTI volumes, and bring the stack up on `6.9.22`.
+
+Local password login remains through `PROVIDERS__LOCAL__STRATEGY=LocalStrategy`.
