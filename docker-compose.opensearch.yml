@@ -36,8 +36,15 @@ services:
       - discovery.type=single-node
       # Uncomment the line below below for a cluster of multiple nodes
       # - cluster.name=docker-cluster
+      # Prefer DISABLE_SECURITY_PLUGIN — plugins.security.disabled alone can leave
+      # the node unhealthy / crash-looping on OpenSearch 3.x.
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
       - plugins.security.disabled=true
+      - bootstrap.memory_lock=true
       - thread_pool.search.queue_size=5000
+      # Must meet OpenSearch complexity rules (upper/lower/digit/special, length ≥8)
+      # even when security is disabled, or the container exits immediately.
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
       - "OPENSEARCH_JAVA_OPTS=-Xms${ELASTIC_MEMORY_SIZE} -Xmx${ELASTIC_MEMORY_SIZE}"
     restart: always
@@ -49,10 +56,11 @@ services:
         soft: 65536
         hard: 65536
     healthcheck:
-      test: curl -s http://opensearch:9200 >/dev/null || exit 1
-      interval: 30s
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health >/dev/null || exit 1"]
+      interval: 10s
       timeout: 10s
-      retries: 50
+      retries: 60
+      start_period: 60s
   minio:
     image: pgsty/silo:latest
     volumes:

@@ -67,6 +67,18 @@ docker compose logs opencti --tail=200 | grep -iE 'OPENID|Error login|Invalid au
 
 A configured provider redirects to Keycloak (HTTP 302/303). HTTP 503 means the OpenID provider is still missing from the running container env.
 
+## OpenSearch unhealthy (`dependency opensearch failed to start`)
+
+If compose shows `xtm-opensearch-1 is unhealthy`, OpenCTI cannot start. On the VM:
+
+```bash
+cd /path/to/cyber-sentinel
+git pull --ff-only origin feat/cyber-sentinel-server-sso
+bash scripts/fix-opensearch.sh
+```
+
+Typical causes: weak `OPENSEARCH_ADMIN_PASSWORD` (`changeme` is rejected), low `vm.max_map_count`, or heap (`ELASTIC_MEMORY_SIZE`) larger than free RAM. The script hardens those and restarts OpenSearch.
+
 ## Port refused on `:9080`
 
 If the portal card opens `http://192.168.11.56:9080/auth/oic` and the browser shows **refused to connect**, OpenCTI is not running (often after pinning `OPENCTI_VERSION=6.9.22` onto an existing OpenCTI **7.x** database).
