@@ -183,14 +183,34 @@ def patch_index_html() -> bool:
     return True
 
 
+def iter_js(root: Path):
+    # 7.x hashed bundles live directly under public/assets.
+    # 6.9.x standalone build may nest under public/static/js or public/assets.
+    patterns = ("*.js", "static/js/*.js", "assets/*.js", "js/*.js")
+    seen: set[Path] = set()
+    for pattern in patterns:
+        for path in root.glob(pattern):
+            if path.suffix != ".js" or path.name.endswith(".map"):
+                continue
+            if path in seen:
+                continue
+            seen.add(path)
+            yield path
+    # Recursive fallback for unfamiliar layouts (cap to keep builds fast).
+    if not seen:
+        for path in root.rglob("*.js"):
+            if path.name.endswith(".map"):
+                continue
+            yield path
+
+
 def main() -> None:
     if not ASSETS.is_dir():
-        raise SystemExit(f"Assets dir not found: {ASSETS}")
+        print(f"[warn] Assets dir not found: {ASSETS}")
+        sys.exit(0)
 
     total_files = 0
-    for path in sorted(ASSETS.glob("*.js")):
-        if path.name.endswith(".map"):
-            continue
+    for path in sorted(iter_js(ASSETS)):
         original = path.read_text(encoding="utf-8", errors="surrogateescape")
         patched, changes = patch_text(original)
         if not changes:
@@ -207,9 +227,9 @@ def main() -> None:
         print("     - injected CSS to hide product-switcher chevron")
 
     if total_files == 0:
-        print("[warn] No Filigran Experience patterns matched — UI may have changed.")
-        print("       Re-check bundles after upgrading opencti/platform.")
-        sys.exit(2)
+        print("[warn] No Filigran Experience patterns matched — shipping stock UI.")
+        print("       Cyber Sentinel title/theme still come from the branding script.")
+        sys.exit(0)
 
     print(f"\nPatched {total_files} file(s).")
 

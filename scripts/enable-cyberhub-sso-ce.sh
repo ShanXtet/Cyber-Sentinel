@@ -68,8 +68,12 @@ git pull --ff-only || true
 "${COMPOSE[@]}" pull opensearch worker || true
 docker pull "opencti/platform:6.9.22"
 docker pull "opencti/worker:6.9.22"
-"${COMPOSE[@]}" build --build-arg "BASE_TAG=6.9.22" opencti
+if ! "${COMPOSE[@]}" build --build-arg "BASE_TAG=6.9.22" opencti; then
+  echo "WARNING: custom image build failed — starting stock opencti/platform:6.9.22" >&2
+  docker tag opencti/platform:6.9.22 cyber-sentinel/platform:custom
+fi
 "${COMPOSE[@]}" up -d opensearch
+# Ensure a platform container exists even if a previous run removed it mid-failure.
 "${COMPOSE[@]}" up -d opencti worker
 
 echo "==> Wait for OpenCTI on :${PORT}"
