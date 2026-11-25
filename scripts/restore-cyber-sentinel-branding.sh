@@ -12,10 +12,14 @@ if [[ ! -f .env ]]; then
 fi
 
 # Export OPENCTI_* so wait loops use the real published port (9080), not 8080.
+# Strip Windows CRLF (\r) — sourcing a CRLF .env otherwise fails with: $'\r': command not found
+ENV_UNIX="$(mktemp)"
+tr -d '\r' < .env > "$ENV_UNIX"
 set -a
-# shellcheck disable=SC1091
-source .env
+# shellcheck disable=SC1090
+source "$ENV_UNIX"
 set +a
+rm -f "$ENV_UNIX"
 
 PORT="${OPENCTI_PORT:-9080}"
 # Branding must hit OpenCTI, never Coturn on :8080.

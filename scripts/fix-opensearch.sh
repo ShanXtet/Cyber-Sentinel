@@ -11,6 +11,12 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# Normalize Windows CRLF so later sed/source steps do not break.
+if grep -q $'\r' .env 2>/dev/null; then
+  tr -d '\r' < .env > .env.unix && mv .env.unix .env
+  echo "==> Converted .env from CRLF to LF"
+fi
+
 COMPOSE=(docker compose -f docker-compose.opensearch.yml)
 
 echo "==> Raising vm.max_map_count (required by OpenSearch)"

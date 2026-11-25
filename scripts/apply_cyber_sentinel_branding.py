@@ -30,10 +30,11 @@ LOGO_SRC_FALLBACK = Path(
 def load_env() -> dict[str, str]:
     env: dict[str, str] = {}
     for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = line.replace("\r", "").strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        env[k.strip()] = v.strip()
+        env[k.strip()] = v.strip().strip('"').strip("'")
     return env
 
 
