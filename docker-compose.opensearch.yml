@@ -131,9 +131,15 @@ services:
   ###########################
 
   opencti:
+    # Custom Cyber Sentinel image (title/theme still applied via branding script).
     # Do not pin 6.9.x onto an existing 7.x DB — :9080 will refuse connections.
     # Community SSO on 7.x needs OPENCTI_ENTERPRISE_EDITION_LICENSE (or a fresh 6.9.22 stack).
-    image: opencti/platform:${OPENCTI_VERSION:-latest}
+    build:
+      context: ./platform-custom
+      args:
+        BASE_IMAGE: opencti/platform
+        BASE_TAG: ${OPENCTI_VERSION:-latest}
+    image: cyber-sentinel/platform:custom
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -176,6 +182,8 @@ services:
       - PROVIDERS__OPENID__CONFIG__SCOPE=openid email profile
       - PROVIDERS__OPENID__CONFIG__LOGOUT_REMOTE=false
       - APP__HEALTH_ACCESS_KEY=${OPENCTI_HEALTHCHECK_ACCESS_KEY}
+      # Empty = hide XTM Hub integration hooks in UI
+      - XTM__XTMHUB_URL=
       # XTM One
       - XTM__XTM_ONE_URL=http://xtm-one:4000
       - XTM__XTM_ONE_TOKEN=${PLATFORM_REGISTRATION_TOKEN}

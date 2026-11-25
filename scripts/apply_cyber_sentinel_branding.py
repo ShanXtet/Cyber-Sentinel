@@ -238,12 +238,22 @@ def prepare_assets() -> tuple[str, str, str]:
     )
 
 
+def resolve_public_url(env: dict[str, str]) -> str:
+    if env.get("OPENCTI_PUBLIC_URL"):
+        return env["OPENCTI_PUBLIC_URL"].rstrip("/")
+    scheme = env.get("OPENCTI_EXTERNAL_SCHEME") or "http"
+    host = env.get("OPENCTI_HOST") or "127.0.0.1"
+    port = env.get("OPENCTI_PORT") or "9080"
+    return f"{scheme}://{host}:{port}".rstrip("/")
+
+
 def main() -> None:
     env = load_env()
     token = env.get("OPENCTI_ADMIN_TOKEN")
     if not token:
         sys.exit("OPENCTI_ADMIN_TOKEN missing in .env")
-    public = (env.get("OPENCTI_PUBLIC_URL") or "http://localhost:8080").rstrip("/")
+    public = resolve_public_url(env)
+    print(f"[info] branding API target: {public}")
     api = f"{public}/graphql"
 
     favicon_uri, logo_full_uri, logo_icon_uri = prepare_assets()
