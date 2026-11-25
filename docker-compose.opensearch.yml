@@ -138,7 +138,7 @@ services:
       context: ./platform-custom
       args:
         BASE_IMAGE: opencti/platform
-        BASE_TAG: ${OPENCTI_VERSION:-latest}
+        BASE_TAG: ${OPENCTI_VERSION:-6.9.22}
     image: cyber-sentinel/platform:custom
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
@@ -205,7 +205,7 @@ services:
       timeout: 5s
       retries: 20
   worker:
-    image: opencti/worker:${OPENCTI_VERSION:-latest}
+    image: opencti/worker:${OPENCTI_VERSION:-6.9.22}
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}

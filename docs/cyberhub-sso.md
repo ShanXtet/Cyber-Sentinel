@@ -96,14 +96,19 @@ bash scripts/recover-opencti-9080.sh
 
 Confirm: `curl -sI http://192.168.11.56:9080/auth/oic` returns a Keycloak redirect (302/303).
 
-## Note on OpenCTI editions (Invalid authentication after Keycloak)
+## Note on OpenCTI editions (`Authentication provider is not available`)
 
-From OpenCTI `7.260224.0`, **SSO is Enterprise Edition only**. Community `latest` can still show “Sign in with CyberHub” and redirect to Keycloak, then land on `/dashboard` with **Invalid authentication**.
+From OpenCTI `7.260224.0`, **SSO is Enterprise Edition only**. Community `latest` can still show “Sign in with CyberHub” and redirect to Keycloak, then land on `/dashboard` with **Authentication provider is not available** (or Invalid authentication). Browser COOP warnings on `http://192.168.11.56` are unrelated.
 
-For an existing 7.x stack:
+**Community Edition path (recommended here):**
 
-1. Keep `OPENCTI_VERSION=latest` (do **not** downgrade in place), and  
-2. Set `OPENCTI_ENTERPRISE_EDITION_LICENSE` to a Filigran/OpenCTI EE PEM, **or**  
-3. Build a **new** Community stack on `OPENCTI_VERSION=6.9.22` with empty volumes (backup first).
+```bash
+cd /opt/opencti   # or your cyber-sentinel path
+bash scripts/enable-cyberhub-sso-ce.sh
+```
 
-Local password login remains through `PROVIDERS__LOCAL__STRATEGY=LocalStrategy`.
+That pins `OPENCTI_VERSION=6.9.22`, recreates the OpenSearch volume, rebuilds the Cyber Sentinel image, and re-applies the amber Cyber Sentinel theme/title.
+
+**Enterprise path:** keep `OPENCTI_VERSION=latest` and set `OPENCTI_ENTERPRISE_EDITION_LICENSE` to a Filigran PEM.
+
+Local password login remains through `PROVIDERS__LOCAL__STRATEGY=LocalStrategy`. Keycloak users must have an **Email**.
