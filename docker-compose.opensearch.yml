@@ -30,7 +30,10 @@ services:
   opensearch:
     image: opensearchproject/opensearch:3.8.0
     volumes:
-      - esdata:/usr/share/opensearch/data
+      # Dedicated volume — do NOT reuse xtm_esdata from Elasticsearch.
+      # That path layout makes OpenSearch exit with:
+      # FileSystemException[.../data/nodes/0: Not a directory]
+      - osdata:/usr/share/opensearch/data
     environment:
       # Comment-out the line below for a cluster of multiple nodes
       - discovery.type=single-node
@@ -446,7 +449,7 @@ services:
     restart: always
 
 volumes:
-  esdata:
+  osdata:
   s3data:
   redisdata:
   amqpdata:

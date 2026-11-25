@@ -42,7 +42,14 @@ ensure_env ELASTIC_MEMORY_SIZE "${ELASTIC_MEMORY_SIZE_OVERRIDE:-2G}"
 echo "==> Pulling compose updates and restarting OpenSearch"
 git pull --ff-only || true
 "${COMPOSE[@]}" pull opensearch || true
-# Recreate so env changes (duplicate security flag removal) take effect.
+
+# Stop orphan Elasticsearch if still running — it owns xtm_esdata and conflicts
+# when OpenSearch was incorrectly pointed at that volume.
+docker rm -f xtm-elasticsearch-1 >/dev/null 2>&1 || true
+"${COMPOSE[@]}" stop opensearch >/dev/null 2>&1 || true
+"${COMPOSE[@]}" rm -f opensearch >/dev/null 2>&1 || true
+
+# Recreate so the new osdata volume + security env take effect.
 "${COMPOSE[@]}" up -d --force-recreate opensearch
 
 echo "==> Waiting for OpenSearch health"
@@ -51,6 +58,7 @@ for i in $(seq 1 60); do
   if echo "$status" | grep -qi healthy; then
     echo "OpenSearch is healthy: $status"
     "${COMPOSE[@]}" up -d opencti worker
+    echo "OpenCTI/workers started. Check: curl -sI http://127.0.0.1:9080/"
     exit 0
   fi
   if echo "$status" | grep -qi 'Exit\|exited'; then
@@ -64,8 +72,8 @@ done
 echo "==> OpenSearch still unhealthy. Last logs:" >&2
 "${COMPOSE[@]}" logs opensearch --tail=120 || true
 echo >&2
-echo "If logs mention corrupt index / incompatible Lucene version, reset ONLY the search volume (wipes OpenCTI search index, not MinIO files):" >&2
+echo "If logs still mention nodes/0 Not a directory, wipe ONLY the OpenSearch volume:" >&2
 echo "  ${COMPOSE[*]} stop opencti worker opensearch" >&2
-echo "  docker volume rm xtm_esdata" >&2
+echo "  docker volume rm xtm_osdata" >&2
 echo "  ${COMPOSE[*]} up -d opensearch && ${COMPOSE[*]} up -d opencti worker" >&2
 exit 1

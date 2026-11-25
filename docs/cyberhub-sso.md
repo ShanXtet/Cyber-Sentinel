@@ -77,7 +77,7 @@ git pull --ff-only origin feat/cyber-sentinel-server-sso
 bash scripts/fix-opensearch.sh
 ```
 
-Typical causes: weak `OPENSEARCH_ADMIN_PASSWORD` (`changeme` is rejected), low `vm.max_map_count`, or heap (`ELASTIC_MEMORY_SIZE`) larger than free RAM. The script hardens those and restarts OpenSearch.
+Typical causes: weak `OPENSEARCH_ADMIN_PASSWORD` (`changeme` is rejected), low `vm.max_map_count`, heap too large, or reusing the Elasticsearch volume (`xtm_esdata`) which makes OpenSearch exit with `nodes/0: Not a directory`. This compose uses a dedicated `osdata` volume.
 
 ## Port refused on `:9080`
 
