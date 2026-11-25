@@ -50,6 +50,7 @@ fi
 
 VOLUMES=(
   "${PROJECT_NAME}_esdata"
+  "${PROJECT_NAME}_osdata"
   "${PROJECT_NAME}_s3data"
   "${PROJECT_NAME}_redisdata"
   "${PROJECT_NAME}_amqpdata"

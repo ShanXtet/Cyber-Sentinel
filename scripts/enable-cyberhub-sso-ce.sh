@@ -71,22 +71,22 @@ if [[ -z "$(env_get CYBERHUB_OIDC_CLIENT_SECRET)" || "$(env_get CYBERHUB_OIDC_CL
   echo "Run from cyberhub-portal: npm run auth:provision-cyber-sentinel" >&2
 fi
 
-echo "==> Stop OpenSearch + platform, then wipe search volume"
-# MUST stop opensearch first — otherwise volume rm fails silently and 6.9.22
-# boots against 7.x indices → container stays unhealthy.
+echo "==> Stop OpenSearch + platform"
 "${COMPOSE[@]}" stop opencti worker opensearch || true
 "${COMPOSE[@]}" rm -f opencti worker opensearch || true
 docker rm -f xtm-opencti-1 xtm-opensearch-1 xtm-worker-1 xtm-worker-2 xtm-worker-3 >/dev/null 2>&1 || true
 
-if docker volume inspect xtm_osdata >/dev/null 2>&1; then
-  docker volume rm -f xtm_osdata
-  echo "==> Removed volume xtm_osdata"
+# DESTRUCTIVE: only when explicitly confirmed. Never wipe production data by default.
+if [[ "${CONFIRM_WIPE_OSDATA:-}" == "yes" ]]; then
+  if docker volume inspect xtm_osdata >/dev/null 2>&1; then
+    docker volume rm -f xtm_osdata
+    echo "==> Removed volume xtm_osdata (CONFIRM_WIPE_OSDATA=yes)"
+  fi
+  docker exec xtm-redis-1 redis-cli FLUSHALL >/dev/null 2>&1 || true
 else
-  echo "==> Volume xtm_osdata already absent"
+  echo "==> Keeping xtm_osdata (set CONFIRM_WIPE_OSDATA=yes only for empty/lab stacks)."
+  echo "    Wiping OpenSearch deletes all OpenCTI entities/intel."
 fi
-
-# Clear Redis session/cache left by OpenCTI 7 (best effort).
-docker exec xtm-redis-1 redis-cli FLUSHALL >/dev/null 2>&1 || true
 
 echo "==> Pull/build OpenCTI 6.9.22 custom image"
 git pull --ff-only || true
