@@ -153,9 +153,8 @@ services:
       - REDIS__HOSTNAME=redis
       - REDIS__PORT=6379
       - ELASTICSEARCH__URL=http://opensearch:9200
-      # Security plugin is disabled — do not send basic auth (breaks some CE clients).
+      # Security plugin is disabled — omit basic auth (admin/pass can break CE clients).
       - ELASTICSEARCH__NUMBER_OF_REPLICAS=0
-      - ELASTICSEARCH__ENGINE_CLIENT=opensearch
       - MINIO__ENDPOINT=minio
       - MINIO__PORT=9000
       - MINIO__USE_SSL=false
