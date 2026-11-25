@@ -120,8 +120,9 @@ services:
   ###########################
 
   opencti:
-    # From 7.260224.0 SSO is Enterprise-only. Pin 6.9.22 for Community CyberHub OpenID.
-    image: opencti/platform:${OPENCTI_VERSION:-6.9.22}
+    # Do not pin 6.9.x onto an existing 7.x DB — :9080 will refuse connections.
+    # Community SSO on 7.x needs OPENCTI_ENTERPRISE_EDITION_LICENSE (or a fresh 6.9.22 stack).
+    image: opencti/platform:${OPENCTI_VERSION:-latest}
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
@@ -185,7 +186,7 @@ services:
       timeout: 5s
       retries: 20
   worker:
-    image: opencti/worker:${OPENCTI_VERSION:-6.9.22}
+    image: opencti/worker:${OPENCTI_VERSION:-latest}
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}

@@ -67,29 +67,31 @@ docker compose logs opencti --tail=200 | grep -iE 'OPENID|Error login|Invalid au
 
 A configured provider redirects to Keycloak (HTTP 302/303). HTTP 503 means the OpenID provider is still missing from the running container env.
 
-## Note on OpenCTI editions (this is the usual cause of the screenshot error)
+## Port refused on `:9080`
 
-From OpenCTI `7.260224.0`, **SSO is Enterprise Edition only**. Community `latest` still shows “Sign in with CyberHub” and redirects to Keycloak, then returns to `/dashboard` with **Invalid authentication, please ask your administrator**.
+If the portal card opens `http://192.168.11.56:9080/auth/oic` and the browser shows **refused to connect**, OpenCTI is not running (often after pinning `OPENCTI_VERSION=6.9.22` onto an existing OpenCTI **7.x** database).
 
-This stack defaults to **`OPENCTI_VERSION=6.9.22`** (last Community line with OpenID). On the VM:
+Restore on the VM:
 
 ```bash
-# in cyber-sentinel/.env
-OPENCTI_VERSION=6.9.22
-
-# elasticsearch compose:
-docker compose pull opencti worker
-docker compose build --no-cache opencti
-docker compose up -d opencti worker
-
-# opensearch compose:
-docker compose -f docker-compose.opensearch.yml pull opencti worker
-docker compose -f docker-compose.opensearch.yml up -d opencti worker
+cd /path/to/cyber-sentinel
+git pull --ff-only origin feat/cyber-sentinel-server-sso
+bash scripts/recover-opencti-9080.sh
+# or manually:
+#   set OPENCTI_VERSION=latest in .env
+#   docker compose -f docker-compose.opensearch.yml up -d opencti worker
 ```
 
-If the platform was already migrated on OpenCTI 7.x, a downgrade can fail schema checks. Then either:
+Confirm: `curl -sI http://192.168.11.56:9080/auth/oic` returns a Keycloak redirect (302/303).
 
-1. Set `OPENCTI_ENTERPRISE_EDITION_LICENSE` to a Filigran/OpenCTI EE PEM and keep `OPENCTI_VERSION=latest`, or  
-2. Take a backup, reset OpenCTI volumes, and bring the stack up on `6.9.22`.
+## Note on OpenCTI editions (Invalid authentication after Keycloak)
+
+From OpenCTI `7.260224.0`, **SSO is Enterprise Edition only**. Community `latest` can still show “Sign in with CyberHub” and redirect to Keycloak, then land on `/dashboard` with **Invalid authentication**.
+
+For an existing 7.x stack:
+
+1. Keep `OPENCTI_VERSION=latest` (do **not** downgrade in place), and  
+2. Set `OPENCTI_ENTERPRISE_EDITION_LICENSE` to a Filigran/OpenCTI EE PEM, **or**  
+3. Build a **new** Community stack on `OPENCTI_VERSION=6.9.22` with empty volumes (backup first).
 
 Local password login remains through `PROVIDERS__LOCAL__STRATEGY=LocalStrategy`.

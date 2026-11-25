@@ -138,13 +138,14 @@ services:
   opencti:
     # Custom image: official platform + Filigran Experience menu removed
     # See PLATFORM-CUSTOM.md — rebuild after upgrading opencti/platform
-    # Pin OPENCTI_VERSION: from 7.260224.0, SSO is Enterprise-only on Community.
-    # Default 6.9.22 keeps CyberHub OpenID working without an EE license.
+    # OPENCTI_VERSION defaults to latest. Do not pin 6.9.x onto an existing 7.x
+    # database — the platform will crash and :9080 will refuse connections.
+    # Community SSO on 7.x needs OPENCTI_ENTERPRISE_EDITION_LICENSE (or a fresh 6.9.22 stack).
     build:
       context: ./platform-custom
       args:
         BASE_IMAGE: opencti/platform
-        BASE_TAG: ${OPENCTI_VERSION:-6.9.22}
+        BASE_TAG: ${OPENCTI_VERSION:-latest}
     image: cyber-sentinel/platform:custom
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
@@ -209,7 +210,7 @@ services:
       timeout: 5s
       retries: 20
   worker:
-    image: opencti/worker:${OPENCTI_VERSION:-6.9.22}
+    image: opencti/worker:${OPENCTI_VERSION:-latest}
     environment:
       - OPENCTI_URL=http://opencti:8080
       - OPENCTI_TOKEN=${OPENCTI_ADMIN_TOKEN}
