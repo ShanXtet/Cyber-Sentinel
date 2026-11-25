@@ -97,7 +97,7 @@ if [[ "$ready" -ne 1 ]]; then
 fi
 
 echo "==> Verify /auth/oic redirects to Keycloak"
-loc="$(curl -sI "http://127.0.0.1:${PORT}/auth/oic" | tr -d '\r' | awk 'tolower($1)==\"location:\"{print $2}')"
+loc="$(curl -sI "http://127.0.0.1:${PORT}/auth/oic" | tr -d '\r' | awk 'tolower($1)=="location:"{print $2}')"
 if [[ "$loc" != *"8180"* && "$loc" != *"openid-connect"* ]]; then
   echo "WARNING: /auth/oic Location unexpected: ${loc:-<empty>}" >&2
   "${COMPOSE[@]}" logs opencti --tail=50 >&2 || true
