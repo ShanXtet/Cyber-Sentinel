@@ -59,8 +59,25 @@ def gql(
     for attempt in range(1, retries + 1):
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
-                payload = json.load(resp)
+                raw = resp.read()
+            try:
+                payload = json.loads(raw.decode("utf-8", errors="replace"))
+            except json.JSONDecodeError as exc:
+                preview = raw[:120].decode("utf-8", errors="replace").replace("\n", " ")
+                raise json.JSONDecodeError(
+                    f"{exc.msg}; body starts with: {preview!r}",
+                    exc.doc,
+                    exc.pos,
+                ) from exc
             if payload.get("errors"):
+                # AUTH_REQUIRED / not-ready responses should retry; hard GraphQL errors raise.
+                codes = [
+                    (err.get("extensions") or {}).get("code")
+                    for err in payload["errors"]
+                    if isinstance(err, dict)
+                ]
+                if any(code in {"AUTH_REQUIRED", "UNAUTHORIZED"} for code in codes):
+                    raise RuntimeError(json.dumps(payload["errors"], indent=2)[:4000])
                 raise RuntimeError(json.dumps(payload["errors"], indent=2)[:4000])
             return payload["data"]
         except (urllib.error.URLError, TimeoutError, ConnectionError, json.JSONDecodeError) as exc:
@@ -239,12 +256,36 @@ def prepare_assets() -> tuple[str, str, str]:
 
 
 def resolve_public_url(env: dict[str, str]) -> str:
-    if env.get("OPENCTI_PUBLIC_URL"):
-        return env["OPENCTI_PUBLIC_URL"].rstrip("/")
+    """Resolve the OpenCTI HTTP origin used for GraphQL branding calls.
+
+    Prefer the published compose port (OPENCTI_PORT, usually 9080). Stale
+    OPENCTI_PUBLIC_URL values like :8080 hit Coturn on this host and return
+    non-JSON, which surfaces as "Expecting value: line 1 column 1".
+    """
+    if env.get("OPENCTI_BRANDING_URL"):
+        return env["OPENCTI_BRANDING_URL"].rstrip("/")
+
     scheme = env.get("OPENCTI_EXTERNAL_SCHEME") or "http"
-    host = env.get("OPENCTI_HOST") or "127.0.0.1"
-    port = env.get("OPENCTI_PORT") or "9080"
-    return f"{scheme}://{host}:{port}".rstrip("/")
+    port = (env.get("OPENCTI_PORT") or "9080").strip()
+
+    # When the script runs on the OpenCTI host, loopback + published port is
+    # the most reliable target (avoids LAN firewall / wrong public URL).
+    if env.get("OPENCTI_BRANDING_USE_LOCALHOST", "true").lower() in {"1", "true", "yes"}:
+        return f"{scheme}://127.0.0.1:{port}"
+
+    host = (env.get("OPENCTI_HOST") or "127.0.0.1").strip()
+    from_parts = f"{scheme}://{host}:{port}"
+
+    public = (env.get("OPENCTI_PUBLIC_URL") or "").rstrip("/")
+    if public:
+        # Ignore PUBLIC_URL when its port disagrees with OPENCTI_PORT.
+        if f":{port}" in public or public.endswith(f":{port}/"):
+            return public
+        print(
+            f"[warn] ignoring OPENCTI_PUBLIC_URL={public} "
+            f"(does not match OPENCTI_PORT={port}); using {from_parts}"
+        )
+    return from_parts
 
 
 def main() -> None:
