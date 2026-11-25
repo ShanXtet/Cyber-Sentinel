@@ -153,9 +153,9 @@ services:
       - REDIS__HOSTNAME=redis
       - REDIS__PORT=6379
       - ELASTICSEARCH__URL=http://opensearch:9200
-      - ELASTICSEARCH__USERNAME=admin
-      - ELASTICSEARCH__PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
+      # Security plugin is disabled — do not send basic auth (breaks some CE clients).
       - ELASTICSEARCH__NUMBER_OF_REPLICAS=0
+      - ELASTICSEARCH__ENGINE_CLIENT=opensearch
       - MINIO__ENDPOINT=minio
       - MINIO__PORT=9000
       - MINIO__USE_SSL=false
@@ -203,7 +203,8 @@ services:
       test:  ["CMD", "wget", "-qO-", "http://opencti:8080/health?health_access_key=${OPENCTI_HEALTHCHECK_ACCESS_KEY}"]
       interval: 10s
       timeout: 5s
-      retries: 20
+      retries: 30
+      start_period: 120s
   worker:
     image: opencti/worker:${OPENCTI_VERSION:-6.9.22}
     environment:

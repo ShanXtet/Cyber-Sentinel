@@ -33,10 +33,15 @@ env_set() {
   local key="$1"
   local value="$2"
   if grep -qE "^${key}=" .env; then
+    # Use | as sed delimiter — values may contain /
     sed -i "s|^${key}=.*|${key}=${value}|" .env
   else
     printf '\n%s=%s\n' "$key" "$value" >> .env
   fi
+}
+
+is_uuid() {
+  [[ "$1" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
 }
 
 COMPOSE=(docker compose -f docker-compose.opensearch.yml)
@@ -53,15 +58,35 @@ env_set CYBERHUB_OIDC_CLIENT_ID "cyber-sentinel"
 env_set CYBERHUB_OIDC_LABEL "Sign in with CyberHub"
 env_set CYBERHUB_OIDC_REDIRECT_URIS "[\"http://192.168.11.56:${PORT}/auth/oic/callback\"]"
 
+# OpenCTI refuses to start unless ADMIN_TOKEN is a real UUID.
+TOKEN="$(env_get OPENCTI_ADMIN_TOKEN)"
+if ! is_uuid "$TOKEN"; then
+  NEW_TOKEN="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)"
+  echo "==> OPENCTI_ADMIN_TOKEN was not a UUID — generating ${NEW_TOKEN}"
+  env_set OPENCTI_ADMIN_TOKEN "$NEW_TOKEN"
+fi
+
 if [[ -z "$(env_get CYBERHUB_OIDC_CLIENT_SECRET)" || "$(env_get CYBERHUB_OIDC_CLIENT_SECRET)" == "ChangeMeWithKeycloakClientSecret" ]]; then
   echo "WARNING: CYBERHUB_OIDC_CLIENT_SECRET is missing/placeholder." >&2
   echo "Run from cyberhub-portal: npm run auth:provision-cyber-sentinel" >&2
 fi
 
-echo "==> Stop platform and reset search volume (7.x index is incompatible with 6.9.22)"
-"${COMPOSE[@]}" stop opencti worker || true
-"${COMPOSE[@]}" rm -f opencti worker || true
-docker volume rm xtm_osdata 2>/dev/null || true
+echo "==> Stop OpenSearch + platform, then wipe search volume"
+# MUST stop opensearch first — otherwise volume rm fails silently and 6.9.22
+# boots against 7.x indices → container stays unhealthy.
+"${COMPOSE[@]}" stop opencti worker opensearch || true
+"${COMPOSE[@]}" rm -f opencti worker opensearch || true
+docker rm -f xtm-opencti-1 xtm-opensearch-1 xtm-worker-1 xtm-worker-2 xtm-worker-3 >/dev/null 2>&1 || true
+
+if docker volume inspect xtm_osdata >/dev/null 2>&1; then
+  docker volume rm -f xtm_osdata
+  echo "==> Removed volume xtm_osdata"
+else
+  echo "==> Volume xtm_osdata already absent"
+fi
+
+# Clear Redis session/cache left by OpenCTI 7 (best effort).
+docker exec xtm-redis-1 redis-cli FLUSHALL >/dev/null 2>&1 || true
 
 echo "==> Pull/build OpenCTI 6.9.22 custom image"
 git pull --ff-only || true
@@ -72,14 +97,31 @@ if ! "${COMPOSE[@]}" build --build-arg "BASE_TAG=6.9.22" opencti; then
   echo "WARNING: custom image build failed — starting stock opencti/platform:6.9.22" >&2
   docker tag opencti/platform:6.9.22 cyber-sentinel/platform:custom
 fi
+
+echo "==> Start OpenSearch, then OpenCTI"
 "${COMPOSE[@]}" up -d opensearch
-# Ensure a platform container exists even if a previous run removed it mid-failure.
+for _ in $(seq 1 36); do
+  status="$("${COMPOSE[@]}" ps opensearch --format '{{.Status}}' 2>/dev/null || true)"
+  if echo "$status" | grep -qi healthy; then
+    break
+  fi
+  sleep 5
+done
+
 "${COMPOSE[@]}" up -d opencti worker
 
 echo "==> Wait for OpenCTI on :${PORT}"
 HEALTH_KEY="$(env_get OPENCTI_HEALTHCHECK_ACCESS_KEY)"
 ready=0
-for _ in $(seq 1 90); do
+for i in $(seq 1 90); do
+  # Surface crash-loops early.
+  running="$("${COMPOSE[@]}" ps opencti --format '{{.Status}}' 2>/dev/null || true)"
+  if echo "$running" | grep -Eqi 'Exit|exited|unhealthy'; then
+    if [[ "$i" -gt 6 ]]; then
+      echo "OpenCTI status: $running" >&2
+      break
+    fi
+  fi
   if [[ -n "${HEALTH_KEY}" ]] && curl -fsS -o /dev/null \
       "http://127.0.0.1:${PORT}/health?health_access_key=${HEALTH_KEY}" 2>/dev/null; then
     ready=1
@@ -94,9 +136,11 @@ for _ in $(seq 1 90); do
   fi
   sleep 5
 done
+
 if [[ "$ready" -ne 1 ]]; then
-  echo "OpenCTI did not become ready. Logs:" >&2
-  "${COMPOSE[@]}" logs opencti --tail=100 >&2 || true
+  echo "OpenCTI did not become ready. Status + logs:" >&2
+  "${COMPOSE[@]}" ps opencti >&2 || true
+  "${COMPOSE[@]}" logs opencti --tail=200 >&2 || true
   exit 1
 fi
 
