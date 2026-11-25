@@ -27,7 +27,7 @@ CYBERHUB_OIDC_REDIRECT_URIS=["http://192.168.11.56:9080/auth/oic/callback"]
 CYBERHUB_OIDC_LABEL=Sign in with CyberHub
 ```
 
-`APP__BASE_URL` is built from `OPENCTI_EXTERNAL_SCHEME`, `OPENCTI_HOST`, and `OPENCTI_PORT`. It must match the browser origin.
+`APP__BASE_URL` is built from `OPENCTI_EXTERNAL_SCHEME`, `OPENCTI_HOST`, and `OPENCTI_PORT` **with a trailing slash**. It must match the browser origin.
 
 ## Keycloak client
 
@@ -38,23 +38,31 @@ Client id `cyber-sentinel`, confidential, standard flow on:
 | Valid redirect URIs | `http://192.168.11.56:9080/auth/oic/callback` |
 | Valid post logout redirect URIs | `http://192.168.11.56:9080/` |
 | Web origins | `http://192.168.11.56:9080` |
+| Default client scopes | include `email`, `profile`, `roles` (or Full scope allowed) |
 
 Assign the client role `access` to users who may open the portal card. That role is for the portal entitlement. OpenCTI still creates or matches its own user on first successful OpenID sign-in.
+
+**Every Keycloak user must have an Email.** OpenCTI maps SSO users by the `email` claim. An empty email after a successful CyberHub login ends on `/dashboard` with `Invalid authentication, please ask your administrator`. Set Email (and Email verified) under **Users → [user] → Details**, or re-run `npm run auth:provision-cyber-sentinel` (it backfills `username@cyberhub.local` when email is missing).
 
 From the portal repo: `npm run auth:provision-cyber-sentinel` updates this client when Keycloak is reachable.
 
 ## Apply on the VM
 
 ```bash
+cd /path/to/cyberhub-portal
+npm run auth:provision-cyber-sentinel
+
 cd /path/to/cyber-sentinel
-# edit .env with the values above
+# confirm CYBERHUB_OIDC_* in .env match the provisioned client secret
 docker compose up -d opencti
+# or: docker compose -f docker-compose.opensearch.yml up -d opencti
 ```
 
 Confirm:
 
 ```bash
 curl -sI http://192.168.11.56:9080/auth/oic
+docker compose logs opencti --tail=200 | grep -iE 'OPENID|Error login|Invalid authentication'
 ```
 
 A configured provider redirects to Keycloak (HTTP 302/303). HTTP 503 means the OpenID provider is still missing from the running container env.

@@ -147,7 +147,8 @@ services:
     environment:
       - NODE_OPTIONS=--max-old-space-size=8096
       - APP__PORT=8080
-      - APP__BASE_URL=${OPENCTI_EXTERNAL_SCHEME}://${OPENCTI_HOST}:${OPENCTI_PORT}
+      # Trailing slash is required for OpenID callback base URL resolution.
+      - APP__BASE_URL=${OPENCTI_EXTERNAL_SCHEME}://${OPENCTI_HOST}:${OPENCTI_PORT}/
       - APP__ADMIN__EMAIL=${OPENCTI_ADMIN_EMAIL}
       - APP__ADMIN__PASSWORD=${OPENCTI_ADMIN_PASSWORD}
       - APP__ADMIN__TOKEN=${OPENCTI_ADMIN_TOKEN}
@@ -171,12 +172,15 @@ services:
       - SMTP__PORT=25
       - PROVIDERS__LOCAL__STRATEGY=LocalStrategy
       # CyberHub Keycloak (OpenID). Keep LocalStrategy so password login remains.
+      # OpenCTI creates/matches users by email — Keycloak users must have an email.
       - PROVIDERS__OPENID__STRATEGY=OpenIDConnectStrategy
       - PROVIDERS__OPENID__CONFIG__LABEL=${CYBERHUB_OIDC_LABEL:-Sign in with CyberHub}
       - PROVIDERS__OPENID__CONFIG__ISSUER=${CYBERHUB_OIDC_ISSUER}
       - PROVIDERS__OPENID__CONFIG__CLIENT_ID=${CYBERHUB_OIDC_CLIENT_ID:-cyber-sentinel}
       - PROVIDERS__OPENID__CONFIG__CLIENT_SECRET=${CYBERHUB_OIDC_CLIENT_SECRET}
-      - PROVIDERS__OPENID__CONFIG__REDIRECT_URIS=${CYBERHUB_OIDC_REDIRECT_URIS}
+      # Quote the JSON array in-compose so docker-compose does not strip brackets.
+      - 'PROVIDERS__OPENID__CONFIG__REDIRECT_URIS=["${OPENCTI_EXTERNAL_SCHEME}://${OPENCTI_HOST}:${OPENCTI_PORT}/auth/oic/callback"]'
+      - PROVIDERS__OPENID__CONFIG__SCOPE=openid email profile
       - PROVIDERS__OPENID__CONFIG__LOGOUT_REMOTE=false
       - APP__HEALTH_ACCESS_KEY=${OPENCTI_HEALTHCHECK_ACCESS_KEY}
       # Empty = hide XTM Hub integration hooks in UI (docs)
