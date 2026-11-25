@@ -42,7 +42,8 @@ ensure_env ELASTIC_MEMORY_SIZE "${ELASTIC_MEMORY_SIZE_OVERRIDE:-2G}"
 echo "==> Pulling compose updates and restarting OpenSearch"
 git pull --ff-only || true
 "${COMPOSE[@]}" pull opensearch || true
-"${COMPOSE[@]}" up -d opensearch
+# Recreate so env changes (duplicate security flag removal) take effect.
+"${COMPOSE[@]}" up -d --force-recreate opensearch
 
 echo "==> Waiting for OpenSearch health"
 for i in $(seq 1 60); do

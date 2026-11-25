@@ -36,11 +36,11 @@ services:
       - discovery.type=single-node
       # Uncomment the line below below for a cluster of multiple nodes
       # - cluster.name=docker-cluster
-      # Prefer DISABLE_SECURITY_PLUGIN — plugins.security.disabled alone can leave
-      # the node unhealthy / crash-looping on OpenSearch 3.x.
+      # DISABLE_SECURITY_PLUGIN already sets plugins.security.disabled=true.
+      # Do NOT also set plugins.security.disabled — OpenSearch 3.x exits with:
+      # "setting [plugins.security.disabled] already set".
       - DISABLE_SECURITY_PLUGIN=true
       - DISABLE_INSTALL_DEMO_CONFIG=true
-      - plugins.security.disabled=true
       - bootstrap.memory_lock=true
       - thread_pool.search.queue_size=5000
       # Must meet OpenSearch complexity rules (upper/lower/digit/special, length ≥8)
